@@ -257,3 +257,110 @@ BEGIN
     END LOOP;
 END;
 /
+
+DECLARE
+    PROCEDURE p(s IN VARCHAR2 DEFAULT NULL) IS
+    BEGIN DBMS_OUTPUT.PUT_LINE(NVL(s,' ')); END;
+    PROCEDURE hdr(t IN VARCHAR2) IS
+    BEGIN p(''); p(RPAD('=',100,'=')); p(t); p(RPAD('=',100,'=')); END;
+    PROCEDURE sub(t IN VARCHAR2) IS
+    BEGIN p(''); p('--- '||t||' '||RPAD('-',GREATEST(95-LENGTH(t),3),'-')); END;
+
+    -- profile une colonne d'une table : nb_rows, distinct, nulls
+    PROCEDURE profile_col(p_tbl IN VARCHAR2, p_col IN VARCHAR2) IS
+        v_tot   NUMBER; v_nn  NUMBER; v_dist NUMBER;
+    BEGIN
+        EXECUTE IMMEDIATE
+            'SELECT COUNT(*), COUNT("'||p_col||'"), COUNT(DISTINCT "'||p_col||'") FROM '||p_tbl
+            INTO v_tot, v_nn, v_dist;
+        p(RPAD(p_tbl,28)||RPAD(p_col,28)||
+          RPAD(TO_CHAR(v_tot),12)||RPAD(TO_CHAR(v_dist),12)||
+          RPAD(TO_CHAR(v_tot-v_nn),12)||
+          LPAD(TO_CHAR(ROUND((v_tot-v_nn)*100/NULLIF(v_tot,0),2),'990.00')||'%',8));
+    EXCEPTION WHEN OTHERS THEN
+        p(RPAD(p_tbl,28)||RPAD(p_col,28)||'(erreur: '||SQLERRM||')');
+    END;
+BEGIN
+    --==========================================================================
+    -- SECTION 3 - PROFILING DES DONNEES
+    --==========================================================================
+    hdr('SECTION 3 - PROFILING DES DONNEES');
+
+    sub('3.1 Profilage des colonnes critiques (TOTAL / DISTINCT / NULL / %NULL)');
+    p(RPAD('TABLE',28)||RPAD('COLUMN',28)||RPAD('TOTAL',12)||
+      RPAD('DISTINCT',12)||RPAD('NULL',12)||'%NULL');
+    p(RPAD('-',100,'-'));
+
+    -- STTM_CUSTOMER
+    profile_col('STTM_CUSTOMER',     'CUSTOMER_NO');
+    profile_col('STTM_CUSTOMER',     'UNIQUE_ID_VALUE');
+    profile_col('STTM_CUSTOMER',     'KYC_REF_NO');
+    profile_col('STTM_CUSTOMER',     'CUSTOMER_NAME1');
+    profile_col('STTM_CUSTOMER',     'SHORT_NAME');
+    profile_col('STTM_CUSTOMER',     'NATIONALITY');
+    profile_col('STTM_CUSTOMER',     'CUSTOMER_TYPE');
+    profile_col('STTM_CUSTOMER',     'CUSTOMER_CATEGORY');
+    profile_col('STTM_CUSTOMER',     'CIF_STATUS');
+    profile_col('STTM_CUSTOMER',     'LIABILITY_NO');
+    -- STTM_CUST_PERSONAL
+    profile_col('STTM_CUST_PERSONAL','CUSTOMER_NO');
+    profile_col('STTM_CUST_PERSONAL','P_NATIONAL_ID');
+    profile_col('STTM_CUST_PERSONAL','PASSPORT_NO');
+    profile_col('STTM_CUST_PERSONAL','FIRST_NAME');
+    profile_col('STTM_CUST_PERSONAL','LAST_NAME');
+    profile_col('STTM_CUST_PERSONAL','DATE_OF_BIRTH');
+    profile_col('STTM_CUST_PERSONAL','SEX');
+    profile_col('STTM_CUST_PERSONAL','E_MAIL');
+    profile_col('STTM_CUST_PERSONAL','MOBILE_NUMBER');
+    -- STTM_CUST_ACCOUNT
+    profile_col('STTM_CUST_ACCOUNT', 'CUST_AC_NO');
+    profile_col('STTM_CUST_ACCOUNT', 'CUST_NO');
+    profile_col('STTM_CUST_ACCOUNT', 'IBAN_AC_NO');
+    profile_col('STTM_CUST_ACCOUNT', 'AC_DESC');
+    profile_col('STTM_CUST_ACCOUNT', 'CCY');
+    profile_col('STTM_CUST_ACCOUNT', 'BRANCH_CODE');
+    profile_col('STTM_CUST_ACCOUNT', 'ACCOUNT_CLASS');
+    profile_col('STTM_CUST_ACCOUNT', 'ACCOUNT_TYPE');
+    profile_col('STTM_CUST_ACCOUNT', 'ACC_STATUS');
+    profile_col('STTM_CUST_ACCOUNT', 'AC_OPEN_DATE');
+    -- STTB_ACCOUNT
+    profile_col('STTB_ACCOUNT',      'AC_GL_NO');
+    profile_col('STTB_ACCOUNT',      'CUST_NO');
+    profile_col('STTB_ACCOUNT',      'AC_OR_GL');
+    profile_col('STTB_ACCOUNT',      'AC_CLASS');
+    profile_col('STTB_ACCOUNT',      'BRANCH_CODE');
+    -- KYC
+    profile_col('STTM_KYC_MASTER',   'KYC_REF_NO');
+    profile_col('STTM_KYC_MASTER',   'KYC_CUST_TYPE');
+    profile_col('STTM_KYC_MASTER',   'RISK_LEVEL');
+    profile_col('STTM_KYC_RETAIL',   'KYC_REF_NO');
+    profile_col('STTM_KYC_RETAIL',   'BIRTH_DATE');
+    profile_col('STTM_KYC_RETAIL',   'NATIONALITY');
+    profile_col('STTM_KYC_RETAIL',   'PASSPORT_NO');
+    profile_col('STTM_KYC_RETAIL',   'TOTAL_INCOME');
+    profile_col('STTM_KYC_CORPORATE','KYC_REF_NO');
+    profile_col('STTM_KYC_CORPORATE','COMPANY_TYPE');
+    profile_col('STTM_KYC_CORPORATE','TRADE_LICENCE_NO');
+    profile_col('STTM_KYC_CORPORATE','ANNUAL_TURNOVER');
+
+    sub('3.2 Champs vides (TRIM=empty) sur identifiants critiques');
+    DECLARE v NUMBER;
+    BEGIN
+        SELECT COUNT(*) INTO v FROM STTM_CUSTOMER
+         WHERE customer_name1 IS NULL OR TRIM(customer_name1) IS NULL;
+        p('STTM_CUSTOMER.CUSTOMER_NAME1 vide      : '||v);
+        SELECT COUNT(*) INTO v FROM STTM_CUSTOMER
+         WHERE short_name IS NULL OR TRIM(short_name) IS NULL;
+        p('STTM_CUSTOMER.SHORT_NAME vide          : '||v);
+        SELECT COUNT(*) INTO v FROM STTM_CUST_PERSONAL
+         WHERE first_name IS NULL OR TRIM(first_name) IS NULL;
+        p('STTM_CUST_PERSONAL.FIRST_NAME vide     : '||v);
+        SELECT COUNT(*) INTO v FROM STTM_CUST_PERSONAL
+         WHERE last_name IS NULL OR TRIM(last_name) IS NULL;
+        p('STTM_CUST_PERSONAL.LAST_NAME vide      : '||v);
+        SELECT COUNT(*) INTO v FROM STTM_CUST_ACCOUNT
+         WHERE ac_desc IS NULL OR TRIM(ac_desc) IS NULL;
+        p('STTM_CUST_ACCOUNT.AC_DESC vide         : '||v);
+    END;
+END;
+/
