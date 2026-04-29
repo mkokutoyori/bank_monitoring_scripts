@@ -15,6 +15,11 @@ SET TRIMSPOOL ON
 
 DECLARE
     -- ------------------------------------------------------------------------
+    -- Variables (doivent etre declarees AVANT les procedures en PL/SQL)
+    -- ------------------------------------------------------------------------
+    v_n NUMBER;
+
+    -- ------------------------------------------------------------------------
     -- Helpers d'affichage
     -- ------------------------------------------------------------------------
     PROCEDURE p(s IN VARCHAR2 DEFAULT NULL) IS
@@ -38,17 +43,16 @@ DECLARE
 
     -- comptage rapide d'une table (nom dynamique, securise par REGEXP)
     FUNCTION cnt(p_table IN VARCHAR2) RETURN NUMBER IS
-        v_n NUMBER;
+        v_local NUMBER;
     BEGIN
         IF NOT REGEXP_LIKE(p_table,'^[A-Z0-9_$#]+$') THEN
             RETURN -1;
         END IF;
-        EXECUTE IMMEDIATE 'SELECT COUNT(*) FROM '||p_table INTO v_n;
-        RETURN v_n;
+        EXECUTE IMMEDIATE 'SELECT COUNT(*) FROM '||p_table INTO v_local;
+        RETURN v_local;
     EXCEPTION WHEN OTHERS THEN RETURN -1;
     END;
 
-    v_n NUMBER;
 BEGIN
     p('RAPPORT EXPLORATION BANKING DATA - genere le ' ||
       TO_CHAR(SYSDATE,'YYYY-MM-DD HH24:MI:SS'));
@@ -122,21 +126,14 @@ END;
 /
 
 DECLARE
+    v_n NUMBER;
+
     PROCEDURE p(s IN VARCHAR2 DEFAULT NULL) IS
     BEGIN DBMS_OUTPUT.PUT_LINE(NVL(s,' ')); END;
     PROCEDURE hdr(t IN VARCHAR2) IS
     BEGIN p(''); p(RPAD('=',100,'=')); p(t); p(RPAD('=',100,'=')); END;
     PROCEDURE sub(t IN VARCHAR2) IS
     BEGIN p(''); p('--- '||t||' '||RPAD('-',GREATEST(95-LENGTH(t),3),'-')); END;
-
-    -- liste des tables cibles - reutilisee dans toutes les sections suivantes
-    TYPE t_tbls IS TABLE OF VARCHAR2(30);
-    g_tbls CONSTANT t_tbls := t_tbls(
-        'STTM_CUSTOMER','STTM_CUST_PERSONAL','STTM_CUST_ACCOUNT',
-        'STTB_ACCOUNT','STTM_ACCOUNT_CLASS','STTM_CUSTOMER_CAT',
-        'STTM_KYC_MASTER','STTM_KYC_RETAIL','STTM_KYC_CORPORATE',
-        'STTM_KYC_CORP_KEYPERSONS');
-    v_n NUMBER;
 BEGIN
     --==========================================================================
     -- SECTION 2 - EXPLORATION DE STRUCTURE
@@ -155,7 +152,7 @@ BEGIN
                 (SELECT COUNT(*) FROM user_constraints u
                   WHERE  u.table_name=t.table_name AND u.constraint_type='P')             has_pk
         FROM    user_tables t
-        WHERE   t.table_name MEMBER OF g_tbls
+        WHERE   t.table_name IN ('STTM_CUSTOMER','STTM_CUST_PERSONAL','STTM_CUST_ACCOUNT','STTB_ACCOUNT','STTM_ACCOUNT_CLASS','STTM_CUSTOMER_CAT','STTM_KYC_MASTER','STTM_KYC_RETAIL','STTM_KYC_CORPORATE','STTM_KYC_CORP_KEYPERSONS')
         ORDER BY t.num_rows DESC NULLS LAST
     ) LOOP
         p(RPAD(r.table_name,32)||
@@ -176,7 +173,7 @@ BEGIN
                     WITHIN GROUP (ORDER BY ucc.position) AS cols
         FROM    user_constraints  uc
         JOIN    user_cons_columns ucc ON ucc.constraint_name=uc.constraint_name
-        WHERE   uc.table_name MEMBER OF g_tbls
+        WHERE   uc.table_name IN ('STTM_CUSTOMER','STTM_CUST_PERSONAL','STTM_CUST_ACCOUNT','STTB_ACCOUNT','STTM_ACCOUNT_CLASS','STTM_CUSTOMER_CAT','STTM_KYC_MASTER','STTM_KYC_RETAIL','STTM_KYC_CORPORATE','STTM_KYC_CORP_KEYPERSONS')
            AND  uc.constraint_type IN ('P','U')
         GROUP BY uc.table_name, uc.constraint_type, uc.constraint_name
         ORDER BY uc.table_name, uc.constraint_type
@@ -199,7 +196,7 @@ BEGIN
         JOIN    user_cons_columns rcc ON rcc.constraint_name = rc.constraint_name
                                       AND rcc.position       = ucc.position
         WHERE   uc.constraint_type = 'R'
-           AND  uc.table_name MEMBER OF g_tbls
+           AND  uc.table_name IN ('STTM_CUSTOMER','STTM_CUST_PERSONAL','STTM_CUST_ACCOUNT','STTB_ACCOUNT','STTM_ACCOUNT_CLASS','STTM_CUSTOMER_CAT','STTM_KYC_MASTER','STTM_KYC_RETAIL','STTM_KYC_CORPORATE','STTM_KYC_CORP_KEYPERSONS')
         GROUP BY uc.table_name, rc.table_name
         ORDER BY uc.table_name
     ) LOOP
@@ -208,7 +205,7 @@ BEGIN
     END LOOP;
     SELECT COUNT(*) INTO v_n
     FROM   user_constraints uc
-    WHERE  uc.constraint_type='R' AND uc.table_name MEMBER OF g_tbls;
+    WHERE  uc.constraint_type='R' AND uc.table_name IN ('STTM_CUSTOMER','STTM_CUST_PERSONAL','STTM_CUST_ACCOUNT','STTB_ACCOUNT','STTM_ACCOUNT_CLASS','STTM_CUSTOMER_CAT','STTM_KYC_MASTER','STTM_KYC_RETAIL','STTM_KYC_CORPORATE','STTM_KYC_CORP_KEYPERSONS');
     IF v_n = 0 THEN
         p('(aucune FK declaree sur les tables cibles - typique FLEXCUBE)');
     END IF;
@@ -221,7 +218,7 @@ BEGIN
                 LISTAGG(ic.column_name,',') WITHIN GROUP (ORDER BY ic.column_position) cols
         FROM    user_indexes i
         JOIN    user_ind_columns ic ON ic.index_name=i.index_name
-        WHERE   i.table_name MEMBER OF g_tbls
+        WHERE   i.table_name IN ('STTM_CUSTOMER','STTM_CUST_PERSONAL','STTM_CUST_ACCOUNT','STTB_ACCOUNT','STTM_ACCOUNT_CLASS','STTM_CUSTOMER_CAT','STTM_KYC_MASTER','STTM_KYC_RETAIL','STTM_KYC_CORPORATE','STTM_KYC_CORP_KEYPERSONS')
         GROUP BY i.table_name, i.index_name, i.uniqueness
         ORDER BY i.table_name, i.uniqueness DESC
     ) LOOP
@@ -237,7 +234,7 @@ BEGIN
         SELECT  c.table_name, c.column_id, c.column_name, c.data_type,
                 c.data_length, c.nullable, c.data_default
         FROM    user_tab_columns c
-        WHERE   c.table_name MEMBER OF g_tbls
+        WHERE   c.table_name IN ('STTM_CUSTOMER','STTM_CUST_PERSONAL','STTM_CUST_ACCOUNT','STTB_ACCOUNT','STTM_ACCOUNT_CLASS','STTM_CUSTOMER_CAT','STTM_KYC_MASTER','STTM_KYC_RETAIL','STTM_KYC_CORPORATE','STTM_KYC_CORP_KEYPERSONS')
         ORDER BY c.table_name, c.column_id
     ) LOOP
         p(RPAD(r.table_name,28)||RPAD(SUBSTR(r.column_name,1,30),32)||
@@ -249,7 +246,7 @@ BEGIN
     FOR r IN (
         SELECT cc.table_name, cc.column_name, cc.comments
         FROM   user_col_comments cc
-        WHERE  cc.table_name MEMBER OF g_tbls
+        WHERE  cc.table_name IN ('STTM_CUSTOMER','STTM_CUST_PERSONAL','STTM_CUST_ACCOUNT','STTB_ACCOUNT','STTM_ACCOUNT_CLASS','STTM_CUSTOMER_CAT','STTM_KYC_MASTER','STTM_KYC_RETAIL','STTM_KYC_CORPORATE','STTM_KYC_CORP_KEYPERSONS')
           AND  cc.comments IS NOT NULL
         ORDER BY cc.table_name, cc.column_name
     ) LOOP
@@ -486,15 +483,15 @@ END;
 /
 
 DECLARE
+    v_n  NUMBER;
+    v_n2 NUMBER;
+
     PROCEDURE p(s IN VARCHAR2 DEFAULT NULL) IS
     BEGIN DBMS_OUTPUT.PUT_LINE(NVL(s,' ')); END;
     PROCEDURE hdr(t IN VARCHAR2) IS
     BEGIN p(''); p(RPAD('=',100,'=')); p(t); p(RPAD('=',100,'=')); END;
     PROCEDURE sub(t IN VARCHAR2) IS
     BEGIN p(''); p('--- '||t||' '||RPAD('-',GREATEST(95-LENGTH(t),3),'-')); END;
-
-    v_n  NUMBER;
-    v_n2 NUMBER;
 BEGIN
     --==========================================================================
     -- SECTION 5 - RELATIONS ENTRE ENTITES
@@ -631,14 +628,14 @@ END;
 /
 
 DECLARE
+    v_n NUMBER;
+
     PROCEDURE p(s IN VARCHAR2 DEFAULT NULL) IS
     BEGIN DBMS_OUTPUT.PUT_LINE(NVL(s,' ')); END;
     PROCEDURE hdr(t IN VARCHAR2) IS
     BEGIN p(''); p(RPAD('=',100,'=')); p(t); p(RPAD('=',100,'=')); END;
     PROCEDURE sub(t IN VARCHAR2) IS
     BEGIN p(''); p('--- '||t||' '||RPAD('-',GREATEST(95-LENGTH(t),3),'-')); END;
-
-    v_n NUMBER;
 BEGIN
     --==========================================================================
     -- SECTION 6 - DETECTION D'ANOMALIES
