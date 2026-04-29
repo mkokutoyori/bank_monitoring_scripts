@@ -69,3 +69,121 @@ SELECT 'CLTB_ACCOUNT_APPS_MASTER'   , COUNT(*)         FROM CLTB_ACCOUNT_APPS_MA
 SELECT 'CLTB_ACCOUNT_COMPONENTS'    , COUNT(*)         FROM CLTB_ACCOUNT_COMPONENTS   UNION ALL
 SELECT 'CLTB_ACCOUNT_SCHEDULES'     , COUNT(*)         FROM CLTB_ACCOUNT_SCHEDULES
 ORDER BY 2 DESC;
+
+PROMPT
+PROMPT ##############################################################################
+PROMPT # SECTION 2 - EXPLORATION DE STRUCTURE
+PROMPT ##############################################################################
+
+-- 2.1 Colonnes detaillees des tables cles (type, taille, nullable)
+PROMPT
+PROMPT --- 2.1 Colonnes des tables cles ---
+SELECT  c.table_name,
+        c.column_id        AS pos,
+        c.column_name,
+        c.data_type,
+        c.data_length,
+        c.data_precision,
+        c.data_scale,
+        c.nullable,
+        c.data_default
+FROM    user_tab_columns c
+WHERE   c.table_name IN (
+            'STTM_CUSTOMER','STTM_CUST_PERSONAL','STTM_CUST_ACCOUNT',
+            'STTB_ACCOUNT','STTM_ACCOUNT_CLASS','STTM_CUSTOMER_CAT',
+            'STTM_KYC_MASTER','STTM_KYC_RETAIL','STTM_KYC_CORPORATE',
+            'STTM_KYC_CORP_KEYPERSONS')
+ORDER BY c.table_name, c.column_id;
+
+-- 2.2 Commentaires de colonnes (semantique metier)
+PROMPT
+PROMPT --- 2.2 Commentaires de colonnes ---
+SELECT  cc.table_name, cc.column_name, cc.comments
+FROM    user_col_comments cc
+WHERE   cc.table_name IN (
+            'STTM_CUSTOMER','STTM_CUST_PERSONAL','STTM_CUST_ACCOUNT',
+            'STTB_ACCOUNT','STTM_ACCOUNT_CLASS','STTM_CUSTOMER_CAT',
+            'STTM_KYC_MASTER','STTM_KYC_RETAIL','STTM_KYC_CORPORATE',
+            'STTM_KYC_CORP_KEYPERSONS')
+   AND  cc.comments IS NOT NULL
+ORDER BY cc.table_name, cc.column_name;
+
+-- 2.3 Cles primaires et uniques
+PROMPT
+PROMPT --- 2.3 Cles primaires / uniques ---
+SELECT  uc.table_name,
+        uc.constraint_name,
+        uc.constraint_type,             -- P=Primary, U=Unique, R=FK, C=Check
+        LISTAGG(ucc.column_name,',')
+            WITHIN GROUP (ORDER BY ucc.position) AS columns
+FROM    user_constraints  uc
+JOIN    user_cons_columns ucc
+        ON ucc.constraint_name = uc.constraint_name
+WHERE   uc.table_name IN (
+            'STTM_CUSTOMER','STTM_CUST_PERSONAL','STTM_CUST_ACCOUNT',
+            'STTB_ACCOUNT','STTM_ACCOUNT_CLASS','STTM_CUSTOMER_CAT',
+            'STTM_KYC_MASTER','STTM_KYC_RETAIL','STTM_KYC_CORPORATE',
+            'STTM_KYC_CORP_KEYPERSONS')
+   AND  uc.constraint_type IN ('P','U')
+GROUP BY uc.table_name, uc.constraint_name, uc.constraint_type
+ORDER BY uc.table_name, uc.constraint_type;
+
+-- 2.4 Cles etrangeres declarees
+PROMPT
+PROMPT --- 2.4 Cles etrangeres ---
+SELECT  uc.table_name              AS child_table,
+        uc.constraint_name,
+        LISTAGG(ucc.column_name,',')
+           WITHIN GROUP (ORDER BY ucc.position) AS child_columns,
+        rc.table_name              AS parent_table,
+        LISTAGG(rcc.column_name,',')
+           WITHIN GROUP (ORDER BY rcc.position) AS parent_columns
+FROM    user_constraints  uc
+JOIN    user_cons_columns ucc ON ucc.constraint_name = uc.constraint_name
+JOIN    user_constraints  rc  ON rc.constraint_name  = uc.r_constraint_name
+JOIN    user_cons_columns rcc ON rcc.constraint_name = rc.constraint_name
+                              AND rcc.position       = ucc.position
+WHERE   uc.constraint_type = 'R'
+   AND  uc.table_name IN (
+            'STTM_CUSTOMER','STTM_CUST_PERSONAL','STTM_CUST_ACCOUNT',
+            'STTB_ACCOUNT','STTM_ACCOUNT_CLASS','STTM_CUSTOMER_CAT',
+            'STTM_KYC_MASTER','STTM_KYC_RETAIL','STTM_KYC_CORPORATE',
+            'STTM_KYC_CORP_KEYPERSONS')
+GROUP BY uc.table_name, uc.constraint_name, rc.table_name
+ORDER BY uc.table_name;
+
+-- 2.5 Index disponibles (utile pour optimiser les requetes futures)
+PROMPT
+PROMPT --- 2.5 Index sur les tables cibles ---
+SELECT  i.table_name,
+        i.index_name,
+        i.uniqueness,
+        i.status,
+        LISTAGG(ic.column_name,',')
+           WITHIN GROUP (ORDER BY ic.column_position) AS index_columns
+FROM    user_indexes      i
+JOIN    user_ind_columns  ic ON ic.index_name = i.index_name
+WHERE   i.table_name IN (
+            'STTM_CUSTOMER','STTM_CUST_PERSONAL','STTM_CUST_ACCOUNT',
+            'STTB_ACCOUNT','STTM_ACCOUNT_CLASS','STTM_CUSTOMER_CAT',
+            'STTM_KYC_MASTER','STTM_KYC_RETAIL','STTM_KYC_CORPORATE',
+            'STTM_KYC_CORP_KEYPERSONS')
+GROUP BY i.table_name, i.index_name, i.uniqueness, i.status
+ORDER BY i.table_name, i.uniqueness DESC;
+
+-- 2.6 Resume : nombre de colonnes / nombre d'index par table
+PROMPT
+PROMPT --- 2.6 Resume volumetrique structure ---
+SELECT  t.table_name,
+        t.num_rows,
+        (SELECT COUNT(*) FROM user_tab_columns c WHERE c.table_name = t.table_name) AS nb_cols,
+        (SELECT COUNT(*) FROM user_indexes     i WHERE i.table_name = t.table_name) AS nb_idx,
+        (SELECT COUNT(*) FROM user_constraints u
+          WHERE u.table_name = t.table_name AND u.constraint_type='P')              AS has_pk
+FROM    user_tables t
+WHERE   t.table_name IN (
+            'STTM_CUSTOMER','STTM_CUST_PERSONAL','STTM_CUST_ACCOUNT',
+            'STTB_ACCOUNT','STTM_ACCOUNT_CLASS','STTM_CUSTOMER_CAT',
+            'STTM_KYC_MASTER','STTM_KYC_RETAIL','STTM_KYC_CORPORATE',
+            'STTM_KYC_CORP_KEYPERSONS')
+ORDER BY t.num_rows DESC NULLS LAST;
