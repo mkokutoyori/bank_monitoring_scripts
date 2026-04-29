@@ -364,3 +364,123 @@ BEGIN
     END;
 END;
 /
+
+DECLARE
+    PROCEDURE p(s IN VARCHAR2 DEFAULT NULL) IS
+    BEGIN DBMS_OUTPUT.PUT_LINE(NVL(s,' ')); END;
+    PROCEDURE hdr(t IN VARCHAR2) IS
+    BEGIN p(''); p(RPAD('=',100,'=')); p(t); p(RPAD('=',100,'=')); END;
+    PROCEDURE sub(t IN VARCHAR2) IS
+    BEGIN p(''); p('--- '||t||' '||RPAD('-',GREATEST(95-LENGTH(t),3),'-')); END;
+
+    -- distribution des valeurs distinctes d'une colonne d'enumeration
+    PROCEDURE distrib(p_tbl  IN VARCHAR2,
+                      p_col  IN VARCHAR2,
+                      p_top  IN NUMBER DEFAULT 30) IS
+        v_sql VARCHAR2(4000);
+        TYPE t_rec IS RECORD (val VARCHAR2(200), nb NUMBER);
+        TYPE t_tab IS TABLE OF t_rec;
+        l_tab t_tab;
+        v_total NUMBER;
+    BEGIN
+        EXECUTE IMMEDIATE 'SELECT COUNT(*) FROM '||p_tbl INTO v_total;
+        v_sql :=
+            'SELECT * FROM ('||
+            '  SELECT NVL(TO_CHAR("'||p_col||'"),''(NULL)'') AS val, COUNT(*) AS nb '||
+            '  FROM '||p_tbl||' GROUP BY "'||p_col||'" ORDER BY 2 DESC) '||
+            'WHERE ROWNUM <= :tp';
+        EXECUTE IMMEDIATE v_sql BULK COLLECT INTO l_tab USING p_top;
+
+        p('');
+        p('>> '||p_tbl||'.'||p_col||'  (total='||v_total||', top '||p_top||')');
+        p(RPAD('VALUE',45)||RPAD('COUNT',12)||'PCT');
+        p(RPAD('-',75,'-'));
+        FOR i IN 1..l_tab.COUNT LOOP
+            p(RPAD(SUBSTR(l_tab(i).val,1,43),45)||
+              RPAD(TO_CHAR(l_tab(i).nb),12)||
+              TO_CHAR(ROUND(l_tab(i).nb*100/NULLIF(v_total,0),2),'990.00')||'%');
+        END LOOP;
+    EXCEPTION WHEN OTHERS THEN
+        p('>> '||p_tbl||'.'||p_col||' : erreur '||SQLERRM);
+    END;
+BEGIN
+    --==========================================================================
+    -- SECTION 4 - ANALYSE DES CODIFICATIONS
+    --==========================================================================
+    hdr('SECTION 4 - ANALYSE DES CODIFICATIONS');
+
+    sub('4.1 STTM_CUSTOMER : statuts, types, categories');
+    distrib('STTM_CUSTOMER','CUSTOMER_TYPE');         -- I=Individual, C=Corporate, B=Bank
+    distrib('STTM_CUSTOMER','CUSTOMER_CATEGORY');
+    distrib('STTM_CUSTOMER','CUST_CLASSIFICATION');
+    distrib('STTM_CUSTOMER','CIF_STATUS');
+    distrib('STTM_CUSTOMER','RISK_CATEGORY');
+    distrib('STTM_CUSTOMER','RECORD_STAT');           -- O=Open, C=Closed
+    distrib('STTM_CUSTOMER','AUTH_STAT');             -- A=Authorized, U=Unauthorized
+    distrib('STTM_CUSTOMER','FROZEN');
+    distrib('STTM_CUSTOMER','DECEASED');
+    distrib('STTM_CUSTOMER','WHEREABOUTS_UNKNOWN');
+    distrib('STTM_CUSTOMER','NATIONALITY', 50);
+    distrib('STTM_CUSTOMER','LANGUAGE');
+    distrib('STTM_CUSTOMER','UNIQUE_ID_NAME');        -- type d'ID utilise
+
+    sub('4.2 STTM_CUST_PERSONAL : sex, resident_status');
+    distrib('STTM_CUST_PERSONAL','SEX');
+    distrib('STTM_CUST_PERSONAL','RESIDENT_STATUS');
+    distrib('STTM_CUST_PERSONAL','MINOR');
+    distrib('STTM_CUST_PERSONAL','US_RES_STATUS');
+
+    sub('4.3 STTM_CUST_ACCOUNT : statuts, types, classes');
+    distrib('STTM_CUST_ACCOUNT','ACCOUNT_TYPE');      -- S=Savings, U=Current,...
+    distrib('STTM_CUST_ACCOUNT','ACC_STATUS');        -- NORM, DORM, CLOS,...
+    distrib('STTM_CUST_ACCOUNT','ACCOUNT_CLASS', 50);
+    distrib('STTM_CUST_ACCOUNT','CCY');
+    distrib('STTM_CUST_ACCOUNT','BRANCH_CODE', 50);
+    distrib('STTM_CUST_ACCOUNT','RECORD_STAT');
+    distrib('STTM_CUST_ACCOUNT','AUTH_STAT');
+    distrib('STTM_CUST_ACCOUNT','AC_STAT_DORMANT');
+    distrib('STTM_CUST_ACCOUNT','AC_STAT_FROZEN');
+    distrib('STTM_CUST_ACCOUNT','AC_STAT_NO_DR');
+    distrib('STTM_CUST_ACCOUNT','AC_STAT_NO_CR');
+    distrib('STTM_CUST_ACCOUNT','AC_STAT_BLOCK');
+    distrib('STTM_CUST_ACCOUNT','AC_STAT_STOP_PAY');
+
+    sub('4.4 STTB_ACCOUNT : nature comptable');
+    distrib('STTB_ACCOUNT','AC_OR_GL');               -- A=Account, G=GL
+    distrib('STTB_ACCOUNT','GL_CATEGORY');
+    distrib('STTB_ACCOUNT','AC_CLASS', 50);
+    distrib('STTB_ACCOUNT','AC_STAT_DORMANT');
+    distrib('STTB_ACCOUNT','AC_STAT_FROZEN');
+    distrib('STTB_ACCOUNT','GL_STAT_BLOCKED');
+    distrib('STTB_ACCOUNT','AUTH_STAT');
+
+    sub('4.5 KYC : risk level, types');
+    distrib('STTM_KYC_MASTER','KYC_CUST_TYPE');
+    distrib('STTM_KYC_MASTER','RISK_LEVEL');
+    distrib('STTM_KYC_MASTER','RECORD_STAT');
+    distrib('STTM_KYC_MASTER','AUTH_STAT');
+    distrib('STTM_KYC_RETAIL','ACC_TYPE');
+    distrib('STTM_KYC_RETAIL','PEP');
+    distrib('STTM_KYC_RETAIL','RESIDENT');
+    distrib('STTM_KYC_CORPORATE','COMPANY_TYPE');
+
+    sub('4.6 Reference : libelles des categories clients (STTM_CUSTOMER_CAT)');
+    p(RPAD('CUST_CAT',15)||'CUST_CAT_DESC');
+    p(RPAD('-',80,'-'));
+    FOR r IN (SELECT cust_cat, cust_cat_desc FROM STTM_CUSTOMER_CAT ORDER BY cust_cat) LOOP
+        p(RPAD(NVL(r.cust_cat,'-'),15)||NVL(r.cust_cat_desc,'-'));
+    END LOOP;
+
+    sub('4.7 Reference : classes de comptes (STTM_ACCOUNT_CLASS)');
+    p(RPAD('ACCOUNT_CLASS',20)||RPAD('TYPE',8)||'DESC');
+    p(RPAD('-',100,'-'));
+    FOR r IN (
+        SELECT account_class, ac_class_type, description
+        FROM   STTM_ACCOUNT_CLASS
+        ORDER BY account_class
+    ) LOOP
+        p(RPAD(r.account_class,20)||RPAD(NVL(r.ac_class_type,'-'),8)||
+          NVL(SUBSTR(r.description,1,60),'-'));
+    END LOOP;
+END;
+/
