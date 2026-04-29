@@ -832,3 +832,173 @@ BEGIN
     p('Comptes Open mais Unauthorized               : '||v_n);
 END;
 /
+
+DECLARE
+    PROCEDURE p(s IN VARCHAR2 DEFAULT NULL) IS
+    BEGIN DBMS_OUTPUT.PUT_LINE(NVL(s,' ')); END;
+    PROCEDURE hdr(t IN VARCHAR2) IS
+    BEGIN p(''); p(RPAD('=',100,'=')); p(t); p(RPAD('=',100,'=')); END;
+    PROCEDURE sub(t IN VARCHAR2) IS
+    BEGIN p(''); p('--- '||t||' '||RPAD('-',GREATEST(95-LENGTH(t),3),'-')); END;
+BEGIN
+    --==========================================================================
+    -- SECTION 7 - ECHANTILLONNAGE DES DONNEES
+    --==========================================================================
+    hdr('SECTION 7 - ECHANTILLONNAGE METIER (50 lignes par table cle)');
+
+    sub('7.1 STTM_CUSTOMER (50 lignes)');
+    p(RPAD('CUSTOMER_NO',15)||RPAD('TYPE',5)||RPAD('CAT',8)||
+      RPAD('CIF_STAT',10)||RPAD('REC',4)||RPAD('AUTH',5)||
+      RPAD('NAT',5)||RPAD('UID_NAME',15)||RPAD('UID_VAL',20)||'NAME');
+    p(RPAD('-',150,'-'));
+    FOR r IN (
+        SELECT * FROM (
+            SELECT customer_no, customer_type, customer_category, cif_status,
+                   record_stat, auth_stat, nationality, unique_id_name,
+                   unique_id_value, customer_name1
+            FROM   STTM_CUSTOMER
+            ORDER BY DBMS_RANDOM.VALUE
+        ) WHERE ROWNUM <= 50
+    ) LOOP
+        p(RPAD(NVL(r.customer_no,'-'),15)||
+          RPAD(NVL(r.customer_type,'-'),5)||
+          RPAD(NVL(SUBSTR(r.customer_category,1,7),'-'),8)||
+          RPAD(NVL(SUBSTR(r.cif_status,1,9),'-'),10)||
+          RPAD(NVL(r.record_stat,'-'),4)||
+          RPAD(NVL(r.auth_stat,'-'),5)||
+          RPAD(NVL(r.nationality,'-'),5)||
+          RPAD(NVL(SUBSTR(r.unique_id_name,1,14),'-'),15)||
+          RPAD(NVL(SUBSTR(r.unique_id_value,1,18),'-'),20)||
+          NVL(SUBSTR(r.customer_name1,1,40),'-'));
+    END LOOP;
+
+    sub('7.2 STTM_CUST_PERSONAL (50 lignes)');
+    p(RPAD('CUST_NO',15)||RPAD('SEX',4)||RPAD('DOB',12)||
+      RPAD('NID',20)||RPAD('PPT',15)||RPAD('FIRST',20)||'LAST');
+    p(RPAD('-',140,'-'));
+    FOR r IN (
+        SELECT * FROM (
+            SELECT customer_no, sex, date_of_birth, p_national_id,
+                   passport_no, first_name, last_name
+            FROM   STTM_CUST_PERSONAL
+            ORDER BY DBMS_RANDOM.VALUE
+        ) WHERE ROWNUM <= 50
+    ) LOOP
+        p(RPAD(NVL(r.customer_no,'-'),15)||
+          RPAD(NVL(r.sex,'-'),4)||
+          RPAD(NVL(TO_CHAR(r.date_of_birth,'YYYY-MM-DD'),'-'),12)||
+          RPAD(NVL(SUBSTR(r.p_national_id,1,18),'-'),20)||
+          RPAD(NVL(SUBSTR(r.passport_no,1,13),'-'),15)||
+          RPAD(NVL(SUBSTR(r.first_name,1,18),'-'),20)||
+          NVL(SUBSTR(r.last_name,1,25),'-'));
+    END LOOP;
+
+    sub('7.3 STTM_CUST_ACCOUNT (50 lignes)');
+    p(RPAD('CUST_AC_NO',22)||RPAD('CUST_NO',15)||RPAD('CCY',5)||
+      RPAD('BR',5)||RPAD('CLASS',12)||RPAD('TYPE',5)||
+      RPAD('STATUS',10)||RPAD('OPEN_DT',12)||'DESC');
+    p(RPAD('-',150,'-'));
+    FOR r IN (
+        SELECT * FROM (
+            SELECT cust_ac_no, cust_no, ccy, branch_code, account_class,
+                   account_type, acc_status, ac_open_date, ac_desc
+            FROM   STTM_CUST_ACCOUNT
+            ORDER BY DBMS_RANDOM.VALUE
+        ) WHERE ROWNUM <= 50
+    ) LOOP
+        p(RPAD(NVL(r.cust_ac_no,'-'),22)||
+          RPAD(NVL(r.cust_no,'-'),15)||
+          RPAD(NVL(r.ccy,'-'),5)||
+          RPAD(NVL(r.branch_code,'-'),5)||
+          RPAD(NVL(SUBSTR(r.account_class,1,11),'-'),12)||
+          RPAD(NVL(r.account_type,'-'),5)||
+          RPAD(NVL(SUBSTR(r.acc_status,1,9),'-'),10)||
+          RPAD(NVL(TO_CHAR(r.ac_open_date,'YYYY-MM-DD'),'-'),12)||
+          NVL(SUBSTR(r.ac_desc,1,40),'-'));
+    END LOOP;
+
+    sub('7.4 STTM_KYC_MASTER (50 lignes)');
+    p(RPAD('KYC_REF_NO',25)||RPAD('CUST_TYPE',12)||RPAD('RISK',8)||
+      RPAD('REC',4)||RPAD('AUTH',5)||'DESC');
+    p(RPAD('-',120,'-'));
+    FOR r IN (
+        SELECT * FROM (
+            SELECT kyc_ref_no, kyc_cust_type, risk_level, record_stat,
+                   auth_stat, kyc_desc
+            FROM   STTM_KYC_MASTER
+            ORDER BY DBMS_RANDOM.VALUE
+        ) WHERE ROWNUM <= 50
+    ) LOOP
+        p(RPAD(NVL(r.kyc_ref_no,'-'),25)||
+          RPAD(NVL(r.kyc_cust_type,'-'),12)||
+          RPAD(NVL(r.risk_level,'-'),8)||
+          RPAD(NVL(r.record_stat,'-'),4)||
+          RPAD(NVL(r.auth_stat,'-'),5)||
+          NVL(SUBSTR(r.kyc_desc,1,60),'-'));
+    END LOOP;
+
+    sub('7.5 STTM_KYC_RETAIL (30 lignes)');
+    p(RPAD('KYC_REF_NO',25)||RPAD('PEP',5)||RPAD('RES',5)||
+      RPAD('NAT',5)||RPAD('BIRTH',12)||RPAD('PPT',15)||'INCOME');
+    p(RPAD('-',120,'-'));
+    FOR r IN (
+        SELECT * FROM (
+            SELECT kyc_ref_no, pep, resident, nationality, birth_date,
+                   passport_no, total_income
+            FROM   STTM_KYC_RETAIL
+            ORDER BY DBMS_RANDOM.VALUE
+        ) WHERE ROWNUM <= 30
+    ) LOOP
+        p(RPAD(NVL(r.kyc_ref_no,'-'),25)||
+          RPAD(NVL(r.pep,'-'),5)||
+          RPAD(NVL(r.resident,'-'),5)||
+          RPAD(NVL(r.nationality,'-'),5)||
+          RPAD(NVL(TO_CHAR(r.birth_date,'YYYY-MM-DD'),'-'),12)||
+          RPAD(NVL(SUBSTR(r.passport_no,1,13),'-'),15)||
+          NVL(TO_CHAR(r.total_income),'-'));
+    END LOOP;
+
+    sub('7.6 STTM_KYC_CORPORATE (30 lignes)');
+    p(RPAD('KYC_REF_NO',25)||RPAD('CO_TYPE',10)||RPAD('TURNOVER',15)||
+      RPAD('LIC_NO',20)||'BUSINESS_NATURE');
+    p(RPAD('-',130,'-'));
+    FOR r IN (
+        SELECT * FROM (
+            SELECT kyc_ref_no, company_type, annual_turnover,
+                   trade_licence_no, business_nature
+            FROM   STTM_KYC_CORPORATE
+            ORDER BY DBMS_RANDOM.VALUE
+        ) WHERE ROWNUM <= 30
+    ) LOOP
+        p(RPAD(NVL(r.kyc_ref_no,'-'),25)||
+          RPAD(NVL(r.company_type,'-'),10)||
+          RPAD(NVL(TO_CHAR(r.annual_turnover),'-'),15)||
+          RPAD(NVL(SUBSTR(r.trade_licence_no,1,18),'-'),20)||
+          NVL(SUBSTR(r.business_nature,1,40),'-'));
+    END LOOP;
+
+    sub('7.7 STTB_ACCOUNT (30 lignes - GL et comptes)');
+    p(RPAD('AC_GL_NO',22)||RPAD('OR_GL',6)||RPAD('CUST_NO',15)||
+      RPAD('CCY',5)||RPAD('BR',5)||'DESC');
+    p(RPAD('-',120,'-'));
+    FOR r IN (
+        SELECT * FROM (
+            SELECT ac_gl_no, ac_or_gl, cust_no, ac_gl_ccy, branch_code, ac_gl_desc
+            FROM   STTB_ACCOUNT
+            ORDER BY DBMS_RANDOM.VALUE
+        ) WHERE ROWNUM <= 30
+    ) LOOP
+        p(RPAD(NVL(r.ac_gl_no,'-'),22)||
+          RPAD(NVL(r.ac_or_gl,'-'),6)||
+          RPAD(NVL(r.cust_no,'-'),15)||
+          RPAD(NVL(r.ac_gl_ccy,'-'),5)||
+          RPAD(NVL(r.branch_code,'-'),5)||
+          NVL(SUBSTR(r.ac_gl_desc,1,50),'-'));
+    END LOOP;
+
+    p('');
+    p(RPAD('=',100,'='));
+    p('FIN DU RAPPORT - genere le '||TO_CHAR(SYSDATE,'YYYY-MM-DD HH24:MI:SS'));
+    p(RPAD('=',100,'='));
+END;
+/
