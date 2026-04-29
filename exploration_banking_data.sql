@@ -629,3 +629,206 @@ BEGIN
     p('KYC present a la fois en RETAIL et CORPORATE (anomalie) : '||v_n);
 END;
 /
+
+DECLARE
+    PROCEDURE p(s IN VARCHAR2 DEFAULT NULL) IS
+    BEGIN DBMS_OUTPUT.PUT_LINE(NVL(s,' ')); END;
+    PROCEDURE hdr(t IN VARCHAR2) IS
+    BEGIN p(''); p(RPAD('=',100,'=')); p(t); p(RPAD('=',100,'=')); END;
+    PROCEDURE sub(t IN VARCHAR2) IS
+    BEGIN p(''); p('--- '||t||' '||RPAD('-',GREATEST(95-LENGTH(t),3),'-')); END;
+
+    v_n NUMBER;
+BEGIN
+    --==========================================================================
+    -- SECTION 6 - DETECTION D'ANOMALIES
+    --==========================================================================
+    hdr('SECTION 6 - DETECTION D''ANOMALIES');
+
+    sub('6.1 Doublons sur identifiants clients');
+    -- 6.1.a NIU / Unique ID partage par plusieurs CIF
+    p('>> Memes UNIQUE_ID_VALUE utilises par plusieurs CUSTOMER_NO :');
+    p(RPAD('UNIQUE_ID_NAME',25)||RPAD('UNIQUE_ID_VALUE',30)||
+      RPAD('NB_CIF',8)||'CUSTOMER_NOS');
+    p(RPAD('-',120,'-'));
+    v_n := 0;
+    FOR r IN (
+        SELECT * FROM (
+            SELECT  unique_id_name, unique_id_value,
+                    COUNT(DISTINCT customer_no) nb_cif,
+                    LISTAGG(customer_no,',') WITHIN GROUP (ORDER BY customer_no) ids
+            FROM    STTM_CUSTOMER
+            WHERE   unique_id_value IS NOT NULL
+            GROUP BY unique_id_name, unique_id_value
+            HAVING  COUNT(DISTINCT customer_no) > 1
+            ORDER BY 3 DESC
+        ) WHERE ROWNUM <= 30
+    ) LOOP
+        v_n := v_n+1;
+        p(RPAD(NVL(r.unique_id_name,'-'),25)||
+          RPAD(SUBSTR(r.unique_id_value,1,28),30)||
+          RPAD(TO_CHAR(r.nb_cif),8)||SUBSTR(r.ids,1,60));
+    END LOOP;
+    IF v_n=0 THEN p('(aucun doublon detecte)'); ELSE p('... ('||v_n||' lignes affichees, max 30)'); END IF;
+
+    -- 6.1.b National ID partage
+    p('');
+    p('>> Memes P_NATIONAL_ID utilises par plusieurs clients :');
+    p(RPAD('P_NATIONAL_ID',30)||RPAD('NB_CIF',8)||'CUSTOMER_NOS');
+    p(RPAD('-',120,'-'));
+    v_n := 0;
+    FOR r IN (
+        SELECT * FROM (
+            SELECT  p_national_id,
+                    COUNT(DISTINCT customer_no) nb_cif,
+                    LISTAGG(customer_no,',') WITHIN GROUP (ORDER BY customer_no) ids
+            FROM    STTM_CUST_PERSONAL
+            WHERE   p_national_id IS NOT NULL AND TRIM(p_national_id) IS NOT NULL
+            GROUP BY p_national_id
+            HAVING  COUNT(DISTINCT customer_no) > 1
+            ORDER BY 2 DESC
+        ) WHERE ROWNUM <= 30
+    ) LOOP
+        v_n := v_n+1;
+        p(RPAD(SUBSTR(r.p_national_id,1,28),30)||
+          RPAD(TO_CHAR(r.nb_cif),8)||SUBSTR(r.ids,1,80));
+    END LOOP;
+    IF v_n=0 THEN p('(aucun doublon detecte)'); END IF;
+
+    -- 6.1.c Passeport partage
+    p('');
+    p('>> Memes PASSPORT_NO utilises par plusieurs clients :');
+    p(RPAD('PASSPORT_NO',25)||RPAD('NB_CIF',8)||'CUSTOMER_NOS');
+    p(RPAD('-',120,'-'));
+    v_n := 0;
+    FOR r IN (
+        SELECT * FROM (
+            SELECT  passport_no,
+                    COUNT(DISTINCT customer_no) nb_cif,
+                    LISTAGG(customer_no,',') WITHIN GROUP (ORDER BY customer_no) ids
+            FROM    STTM_CUST_PERSONAL
+            WHERE   passport_no IS NOT NULL AND TRIM(passport_no) IS NOT NULL
+            GROUP BY passport_no
+            HAVING  COUNT(DISTINCT customer_no) > 1
+            ORDER BY 2 DESC
+        ) WHERE ROWNUM <= 20
+    ) LOOP
+        v_n := v_n+1;
+        p(RPAD(SUBSTR(r.passport_no,1,23),25)||
+          RPAD(TO_CHAR(r.nb_cif),8)||SUBSTR(r.ids,1,80));
+    END LOOP;
+    IF v_n=0 THEN p('(aucun doublon detecte)'); END IF;
+
+    sub('6.2 Doublons potentiels sur (NOM + DATE_OF_BIRTH)');
+    p(RPAD('FIRST_NAME',25)||RPAD('LAST_NAME',25)||RPAD('DOB',12)||
+      RPAD('NB',6)||'CUSTOMER_NOS');
+    p(RPAD('-',120,'-'));
+    v_n := 0;
+    FOR r IN (
+        SELECT * FROM (
+            SELECT  UPPER(TRIM(first_name)) fn,
+                    UPPER(TRIM(last_name))  ln,
+                    date_of_birth dob,
+                    COUNT(*) nb,
+                    LISTAGG(customer_no,',') WITHIN GROUP (ORDER BY customer_no) ids
+            FROM    STTM_CUST_PERSONAL
+            WHERE   first_name IS NOT NULL AND last_name IS NOT NULL
+              AND   date_of_birth IS NOT NULL
+            GROUP BY UPPER(TRIM(first_name)), UPPER(TRIM(last_name)), date_of_birth
+            HAVING  COUNT(*) > 1
+            ORDER BY 4 DESC
+        ) WHERE ROWNUM <= 30
+    ) LOOP
+        v_n := v_n+1;
+        p(RPAD(SUBSTR(r.fn,1,23),25)||RPAD(SUBSTR(r.ln,1,23),25)||
+          RPAD(TO_CHAR(r.dob,'YYYY-MM-DD'),12)||
+          RPAD(TO_CHAR(r.nb),6)||SUBSTR(r.ids,1,60));
+    END LOOP;
+    IF v_n=0 THEN p('(aucun doublon detecte)'); END IF;
+
+    sub('6.3 Doublons sur comptes');
+    p('>> IBAN utilise par plusieurs comptes :');
+    p(RPAD('IBAN_AC_NO',35)||RPAD('NB',6)||'CUST_AC_NOS');
+    p(RPAD('-',120,'-'));
+    v_n := 0;
+    FOR r IN (
+        SELECT * FROM (
+            SELECT  iban_ac_no, COUNT(*) nb,
+                    LISTAGG(cust_ac_no,',') WITHIN GROUP (ORDER BY cust_ac_no) acs
+            FROM    STTM_CUST_ACCOUNT
+            WHERE   iban_ac_no IS NOT NULL
+            GROUP BY iban_ac_no
+            HAVING  COUNT(*) > 1
+            ORDER BY 2 DESC
+        ) WHERE ROWNUM <= 20
+    ) LOOP
+        v_n := v_n+1;
+        p(RPAD(SUBSTR(r.iban_ac_no,1,33),35)||
+          RPAD(TO_CHAR(r.nb),6)||SUBSTR(r.acs,1,60));
+    END LOOP;
+    IF v_n=0 THEN p('(aucun doublon IBAN)'); END IF;
+
+    p('');
+    p('>> ALT_AC_NO utilise par plusieurs comptes :');
+    p(RPAD('ALT_AC_NO',25)||RPAD('NB',6)||'CUST_AC_NOS');
+    p(RPAD('-',120,'-'));
+    v_n := 0;
+    FOR r IN (
+        SELECT * FROM (
+            SELECT  alt_ac_no, COUNT(*) nb,
+                    LISTAGG(cust_ac_no,',') WITHIN GROUP (ORDER BY cust_ac_no) acs
+            FROM    STTM_CUST_ACCOUNT
+            WHERE   alt_ac_no IS NOT NULL
+            GROUP BY alt_ac_no
+            HAVING  COUNT(*) > 1
+            ORDER BY 2 DESC
+        ) WHERE ROWNUM <= 20
+    ) LOOP
+        v_n := v_n+1;
+        p(RPAD(SUBSTR(r.alt_ac_no,1,23),25)||
+          RPAD(TO_CHAR(r.nb),6)||SUBSTR(r.acs,1,80));
+    END LOOP;
+    IF v_n=0 THEN p('(aucun doublon ALT_AC_NO)'); END IF;
+
+    sub('6.4 Champs critiques manquants - resume');
+    SELECT COUNT(*) INTO v_n FROM STTM_CUSTOMER
+     WHERE customer_name1 IS NULL OR TRIM(customer_name1) IS NULL;
+    p('STTM_CUSTOMER         sans CUSTOMER_NAME1     : '||v_n);
+    SELECT COUNT(*) INTO v_n FROM STTM_CUSTOMER WHERE unique_id_value IS NULL;
+    p('STTM_CUSTOMER         sans UNIQUE_ID_VALUE    : '||v_n);
+    SELECT COUNT(*) INTO v_n FROM STTM_CUSTOMER WHERE nationality IS NULL;
+    p('STTM_CUSTOMER         sans NATIONALITY        : '||v_n);
+    SELECT COUNT(*) INTO v_n FROM STTM_CUST_PERSONAL WHERE date_of_birth IS NULL;
+    p('STTM_CUST_PERSONAL    sans DATE_OF_BIRTH      : '||v_n);
+    SELECT COUNT(*) INTO v_n FROM STTM_CUST_PERSONAL
+     WHERE p_national_id IS NULL AND passport_no IS NULL;
+    p('STTM_CUST_PERSONAL    sans NID ni PASSPORT    : '||v_n);
+    SELECT COUNT(*) INTO v_n FROM STTM_CUST_ACCOUNT WHERE cust_no IS NULL;
+    p('STTM_CUST_ACCOUNT     sans CUST_NO            : '||v_n);
+    SELECT COUNT(*) INTO v_n FROM STTM_CUST_ACCOUNT WHERE ac_open_date IS NULL;
+    p('STTM_CUST_ACCOUNT     sans AC_OPEN_DATE       : '||v_n);
+
+    sub('6.5 Coherences logiques');
+    -- DOB futur ou trop ancien
+    SELECT COUNT(*) INTO v_n FROM STTM_CUST_PERSONAL WHERE date_of_birth > SYSDATE;
+    p('Date de naissance dans le FUTUR              : '||v_n);
+    SELECT COUNT(*) INTO v_n FROM STTM_CUST_PERSONAL
+     WHERE date_of_birth < TO_DATE('1900-01-01','YYYY-MM-DD');
+    p('Date de naissance avant 1900                 : '||v_n);
+    SELECT COUNT(*) INTO v_n FROM STTM_CUST_PERSONAL
+     WHERE MONTHS_BETWEEN(SYSDATE,date_of_birth)/12 > 110;
+    p('Age > 110 ans                                : '||v_n);
+    -- Compte ouvert dans le futur
+    SELECT COUNT(*) INTO v_n FROM STTM_CUST_ACCOUNT WHERE ac_open_date > SYSDATE;
+    p('Comptes avec AC_OPEN_DATE dans le FUTUR      : '||v_n);
+    -- Passeport expire mais utilise comme ID actif
+    SELECT COUNT(*) INTO v_n FROM STTM_CUST_PERSONAL
+     WHERE ppt_exp_date IS NOT NULL AND ppt_exp_date < SYSDATE
+       AND passport_no IS NOT NULL;
+    p('Passeport expire et toujours renseigne       : '||v_n);
+    -- Status incoherent : compte non autorise mais ouvert
+    SELECT COUNT(*) INTO v_n FROM STTM_CUST_ACCOUNT
+     WHERE auth_stat='U' AND record_stat='O';
+    p('Comptes Open mais Unauthorized               : '||v_n);
+END;
+/
