@@ -187,3 +187,120 @@ WHERE   t.table_name IN (
             'STTM_KYC_MASTER','STTM_KYC_RETAIL','STTM_KYC_CORPORATE',
             'STTM_KYC_CORP_KEYPERSONS')
 ORDER BY t.num_rows DESC NULLS LAST;
+
+PROMPT
+PROMPT ##############################################################################
+PROMPT # SECTION 3 - PROFILING DES DONNEES
+PROMPT ##############################################################################
+
+-- 3.1 STTM_CUSTOMER : volumetrie + qualite des champs cles
+PROMPT
+PROMPT --- 3.1 STTM_CUSTOMER : qualite des champs cles ---
+SELECT  COUNT(*)                                                          AS total_rows,
+        COUNT(DISTINCT customer_no)                                       AS dist_customer_no,
+        COUNT(*) - COUNT(customer_no)                                     AS null_customer_no,
+        COUNT(DISTINCT unique_id_value)                                   AS dist_unique_id,
+        COUNT(*) - COUNT(unique_id_value)                                 AS null_unique_id,
+        COUNT(DISTINCT kyc_ref_no)                                        AS dist_kyc_ref,
+        COUNT(*) - COUNT(kyc_ref_no)                                      AS null_kyc_ref,
+        COUNT(DISTINCT liability_no)                                      AS dist_liability_no,
+        SUM(CASE WHEN customer_name1 IS NULL OR TRIM(customer_name1)='' THEN 1 ELSE 0 END) AS null_name,
+        SUM(CASE WHEN short_name     IS NULL OR TRIM(short_name)='' THEN 1 ELSE 0 END)     AS null_short_name,
+        SUM(CASE WHEN nationality    IS NULL THEN 1 ELSE 0 END)                            AS null_nationality
+FROM    STTM_CUSTOMER;
+
+-- 3.2 STTM_CUST_PERSONAL : qualite des donnees personnes physiques
+PROMPT
+PROMPT --- 3.2 STTM_CUST_PERSONAL : qualite ---
+SELECT  COUNT(*)                                                          AS total_rows,
+        COUNT(DISTINCT customer_no)                                       AS dist_customer_no,
+        COUNT(DISTINCT p_national_id)                                     AS dist_national_id,
+        COUNT(*) - COUNT(p_national_id)                                   AS null_national_id,
+        COUNT(DISTINCT passport_no)                                       AS dist_passport,
+        SUM(CASE WHEN first_name    IS NULL OR TRIM(first_name)='' THEN 1 ELSE 0 END) AS null_first_name,
+        SUM(CASE WHEN last_name     IS NULL OR TRIM(last_name)='' THEN 1 ELSE 0 END)  AS null_last_name,
+        SUM(CASE WHEN date_of_birth IS NULL THEN 1 ELSE 0 END)                        AS null_dob,
+        SUM(CASE WHEN sex           IS NULL THEN 1 ELSE 0 END)                        AS null_sex,
+        SUM(CASE WHEN e_mail        IS NULL THEN 1 ELSE 0 END)                        AS null_email,
+        SUM(CASE WHEN mobile_number IS NULL THEN 1 ELSE 0 END)                        AS null_mobile
+FROM    STTM_CUST_PERSONAL;
+
+-- 3.3 STTM_CUST_ACCOUNT : qualite cote comptes
+PROMPT
+PROMPT --- 3.3 STTM_CUST_ACCOUNT : qualite ---
+SELECT  COUNT(*)                                                          AS total_rows,
+        COUNT(DISTINCT cust_ac_no)                                        AS dist_cust_ac_no,
+        COUNT(DISTINCT cust_no)                                           AS dist_cust_no,
+        COUNT(DISTINCT iban_ac_no)                                        AS dist_iban,
+        COUNT(*) - COUNT(cust_ac_no)                                      AS null_account_no,
+        COUNT(*) - COUNT(cust_no)                                         AS null_cust_no,
+        SUM(CASE WHEN ac_desc       IS NULL OR TRIM(ac_desc)='' THEN 1 ELSE 0 END)  AS null_ac_desc,
+        SUM(CASE WHEN ccy           IS NULL THEN 1 ELSE 0 END)                      AS null_ccy,
+        SUM(CASE WHEN branch_code   IS NULL THEN 1 ELSE 0 END)                      AS null_branch,
+        SUM(CASE WHEN account_class IS NULL THEN 1 ELSE 0 END)                      AS null_acclass,
+        SUM(CASE WHEN ac_open_date  IS NULL THEN 1 ELSE 0 END)                      AS null_open_date
+FROM    STTM_CUST_ACCOUNT;
+
+-- 3.4 STTB_ACCOUNT : table comptable (GL + comptes clients)
+PROMPT
+PROMPT --- 3.4 STTB_ACCOUNT : qualite ---
+SELECT  COUNT(*)                                                          AS total_rows,
+        COUNT(DISTINCT ac_gl_no)                                          AS dist_ac_gl_no,
+        COUNT(DISTINCT cust_no)                                           AS dist_cust_no,
+        SUM(CASE WHEN ac_or_gl='A' THEN 1 ELSE 0 END)                     AS nb_accounts,
+        SUM(CASE WHEN ac_or_gl='G' THEN 1 ELSE 0 END)                     AS nb_gls,
+        SUM(CASE WHEN cust_no   IS NULL AND ac_or_gl='A' THEN 1 ELSE 0 END) AS account_without_cust
+FROM    STTB_ACCOUNT;
+
+-- 3.5 STTM_KYC_MASTER : couverture KYC
+PROMPT
+PROMPT --- 3.5 STTM_KYC_MASTER : qualite ---
+SELECT  COUNT(*)                                                          AS total_rows,
+        COUNT(DISTINCT kyc_ref_no)                                        AS dist_kyc_ref,
+        COUNT(*) - COUNT(kyc_ref_no)                                      AS null_kyc_ref,
+        SUM(CASE WHEN risk_level    IS NULL THEN 1 ELSE 0 END)            AS null_risk_level,
+        SUM(CASE WHEN kyc_cust_type IS NULL THEN 1 ELSE 0 END)            AS null_cust_type
+FROM    STTM_KYC_MASTER;
+
+-- 3.6 STTM_KYC_RETAIL & STTM_KYC_CORPORATE : repartition
+PROMPT
+PROMPT --- 3.6 KYC RETAIL : qualite ---
+SELECT  COUNT(*)                                                          AS total_rows,
+        COUNT(DISTINCT kyc_ref_no)                                        AS dist_kyc_ref,
+        SUM(CASE WHEN birth_date  IS NULL THEN 1 ELSE 0 END)              AS null_birth,
+        SUM(CASE WHEN nationality IS NULL THEN 1 ELSE 0 END)              AS null_nat,
+        SUM(CASE WHEN passport_no IS NULL THEN 1 ELSE 0 END)              AS null_passport,
+        SUM(CASE WHEN total_income IS NULL OR total_income = 0 THEN 1 ELSE 0 END) AS null_or_zero_income
+FROM    STTM_KYC_RETAIL;
+
+PROMPT
+PROMPT --- 3.7 KYC CORPORATE : qualite ---
+SELECT  COUNT(*)                                                          AS total_rows,
+        COUNT(DISTINCT kyc_ref_no)                                        AS dist_kyc_ref,
+        SUM(CASE WHEN company_type    IS NULL THEN 1 ELSE 0 END)          AS null_company_type,
+        SUM(CASE WHEN trade_licence_no IS NULL THEN 1 ELSE 0 END)         AS null_trade_lic,
+        SUM(CASE WHEN annual_turnover IS NULL OR annual_turnover = 0 THEN 1 ELSE 0 END) AS null_or_zero_turnover
+FROM    STTM_KYC_CORPORATE;
+
+-- 3.8 Profiling generique : top tables par taux de NULL sur colonnes critiques
+PROMPT
+PROMPT --- 3.8 Synthese qualite (taux de remplissage des colonnes cles) ---
+WITH src AS (
+    SELECT 'STTM_CUSTOMER'      AS tbl, 'CUSTOMER_NO'  AS col, COUNT(*) AS tot, COUNT(customer_no)   AS notnull FROM STTM_CUSTOMER
+    UNION ALL SELECT 'STTM_CUSTOMER',     'UNIQUE_ID_VALUE', COUNT(*), COUNT(unique_id_value)        FROM STTM_CUSTOMER
+    UNION ALL SELECT 'STTM_CUSTOMER',     'KYC_REF_NO',      COUNT(*), COUNT(kyc_ref_no)             FROM STTM_CUSTOMER
+    UNION ALL SELECT 'STTM_CUST_PERSONAL','P_NATIONAL_ID',   COUNT(*), COUNT(p_national_id)          FROM STTM_CUST_PERSONAL
+    UNION ALL SELECT 'STTM_CUST_PERSONAL','PASSPORT_NO',     COUNT(*), COUNT(passport_no)            FROM STTM_CUST_PERSONAL
+    UNION ALL SELECT 'STTM_CUST_PERSONAL','DATE_OF_BIRTH',   COUNT(*), COUNT(date_of_birth)          FROM STTM_CUST_PERSONAL
+    UNION ALL SELECT 'STTM_CUST_ACCOUNT', 'CUST_AC_NO',      COUNT(*), COUNT(cust_ac_no)             FROM STTM_CUST_ACCOUNT
+    UNION ALL SELECT 'STTM_CUST_ACCOUNT', 'CUST_NO',         COUNT(*), COUNT(cust_no)                FROM STTM_CUST_ACCOUNT
+    UNION ALL SELECT 'STTM_CUST_ACCOUNT', 'IBAN_AC_NO',      COUNT(*), COUNT(iban_ac_no)             FROM STTM_CUST_ACCOUNT
+)
+SELECT  tbl,
+        col,
+        tot,
+        notnull,
+        tot-notnull                                              AS nb_null,
+        ROUND( (tot-notnull) * 100 / NULLIF(tot,0), 2)           AS pct_null
+FROM    src
+ORDER BY tbl, col;
