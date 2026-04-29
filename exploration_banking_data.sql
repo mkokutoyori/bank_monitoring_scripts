@@ -484,3 +484,148 @@ BEGIN
     END LOOP;
 END;
 /
+
+DECLARE
+    PROCEDURE p(s IN VARCHAR2 DEFAULT NULL) IS
+    BEGIN DBMS_OUTPUT.PUT_LINE(NVL(s,' ')); END;
+    PROCEDURE hdr(t IN VARCHAR2) IS
+    BEGIN p(''); p(RPAD('=',100,'=')); p(t); p(RPAD('=',100,'=')); END;
+    PROCEDURE sub(t IN VARCHAR2) IS
+    BEGIN p(''); p('--- '||t||' '||RPAD('-',GREATEST(95-LENGTH(t),3),'-')); END;
+
+    v_n  NUMBER;
+    v_n2 NUMBER;
+BEGIN
+    --==========================================================================
+    -- SECTION 5 - RELATIONS ENTRE ENTITES
+    --==========================================================================
+    hdr('SECTION 5 - RELATIONS ENTRE ENTITES (CIF / COMPTES / KYC)');
+
+    sub('5.1 Cardinalite client <-> compte (STTM_CUSTOMER vs STTM_CUST_ACCOUNT)');
+    SELECT COUNT(*)            INTO v_n  FROM STTM_CUSTOMER;
+    SELECT COUNT(DISTINCT cust_no) INTO v_n2 FROM STTM_CUST_ACCOUNT;
+    p('Clients (STTM_CUSTOMER)              : '||v_n);
+    p('Clients distincts dans CUST_ACCOUNT  : '||v_n2);
+
+    sub('5.2 Distribution du nombre de comptes par client');
+    p(RPAD('NB_COMPTES',15)||RPAD('NB_CLIENTS',15)||'PCT');
+    p(RPAD('-',60,'-'));
+    DECLARE v_total NUMBER;
+    BEGIN
+        SELECT COUNT(*) INTO v_total FROM (
+            SELECT cust_no FROM STTM_CUST_ACCOUNT GROUP BY cust_no
+        );
+        FOR r IN (
+            SELECT bucket, COUNT(*) AS nb_clients
+            FROM (
+                SELECT CASE
+                          WHEN nb=1 THEN '1'
+                          WHEN nb=2 THEN '2'
+                          WHEN nb BETWEEN 3 AND 5 THEN '3-5'
+                          WHEN nb BETWEEN 6 AND 10 THEN '6-10'
+                          WHEN nb BETWEEN 11 AND 20 THEN '11-20'
+                          ELSE '>20'
+                       END AS bucket
+                FROM (SELECT cust_no, COUNT(*) AS nb
+                      FROM STTM_CUST_ACCOUNT GROUP BY cust_no)
+            )
+            GROUP BY bucket
+            ORDER BY DECODE(bucket,'1',1,'2',2,'3-5',3,'6-10',4,'11-20',5,6)
+        ) LOOP
+            p(RPAD(r.bucket,15)||RPAD(TO_CHAR(r.nb_clients),15)||
+              TO_CHAR(ROUND(r.nb_clients*100/NULLIF(v_total,0),2),'990.00')||'%');
+        END LOOP;
+    END;
+
+    sub('5.3 Top 20 clients avec le plus de comptes');
+    p(RPAD('CUSTOMER_NO',20)||RPAD('NB_COMPTES',12)||'CUSTOMER_NAME1');
+    p(RPAD('-',100,'-'));
+    FOR r IN (
+        SELECT * FROM (
+            SELECT  a.cust_no,
+                    COUNT(*) AS nb,
+                    MAX(c.customer_name1) AS nom
+            FROM    STTM_CUST_ACCOUNT a
+            LEFT JOIN STTM_CUSTOMER  c ON c.customer_no = a.cust_no
+            GROUP BY a.cust_no
+            ORDER BY 2 DESC
+        ) WHERE ROWNUM <= 20
+    ) LOOP
+        p(RPAD(NVL(r.cust_no,'(NULL)'),20)||RPAD(TO_CHAR(r.nb),12)||
+          NVL(SUBSTR(r.nom,1,60),'-'));
+    END LOOP;
+
+    sub('5.4 Clients SANS compte (presents dans STTM_CUSTOMER mais absents de STTM_CUST_ACCOUNT)');
+    SELECT COUNT(*) INTO v_n FROM (
+        SELECT customer_no FROM STTM_CUSTOMER
+        MINUS
+        SELECT cust_no FROM STTM_CUST_ACCOUNT WHERE cust_no IS NOT NULL
+    );
+    p('Nombre de clients sans aucun compte : '||v_n);
+    p('');
+    p('Echantillon (10 premiers) :');
+    p(RPAD('CUSTOMER_NO',20)||RPAD('TYPE',6)||RPAD('STATUS',12)||'NAME');
+    p(RPAD('-',100,'-'));
+    FOR r IN (
+        SELECT * FROM (
+            SELECT c.customer_no, c.customer_type, c.cif_status, c.customer_name1
+            FROM   STTM_CUSTOMER c
+            WHERE  NOT EXISTS (SELECT 1 FROM STTM_CUST_ACCOUNT a
+                                WHERE a.cust_no = c.customer_no)
+            ORDER BY c.customer_no
+        ) WHERE ROWNUM <= 10
+    ) LOOP
+        p(RPAD(r.customer_no,20)||RPAD(NVL(r.customer_type,'-'),6)||
+          RPAD(NVL(r.cif_status,'-'),12)||NVL(SUBSTR(r.customer_name1,1,50),'-'));
+    END LOOP;
+
+    sub('5.5 Comptes SANS client (cust_no absent ou inconnu)');
+    SELECT COUNT(*) INTO v_n FROM STTM_CUST_ACCOUNT
+     WHERE cust_no IS NULL;
+    p('Comptes avec CUST_NO NULL                       : '||v_n);
+    SELECT COUNT(*) INTO v_n
+    FROM   STTM_CUST_ACCOUNT a
+    WHERE  a.cust_no IS NOT NULL
+      AND  NOT EXISTS (SELECT 1 FROM STTM_CUSTOMER c
+                        WHERE c.customer_no = a.cust_no);
+    p('Comptes pointant vers un CIF inexistant (orphan): '||v_n);
+
+    sub('5.6 STTM_CUSTOMER vs STTM_CUST_PERSONAL (couverture personnes physiques)');
+    SELECT COUNT(*) INTO v_n  FROM STTM_CUSTOMER WHERE customer_type='I';
+    SELECT COUNT(*) INTO v_n2 FROM STTM_CUST_PERSONAL;
+    p('Clients de type I (Individual)        : '||v_n);
+    p('Lignes STTM_CUST_PERSONAL             : '||v_n2);
+    SELECT COUNT(*) INTO v_n FROM STTM_CUSTOMER c
+     WHERE customer_type='I'
+       AND NOT EXISTS (SELECT 1 FROM STTM_CUST_PERSONAL p
+                        WHERE p.customer_no = c.customer_no);
+    p('Particuliers SANS fiche CUST_PERSONAL : '||v_n);
+    SELECT COUNT(*) INTO v_n FROM STTM_CUST_PERSONAL p
+     WHERE NOT EXISTS (SELECT 1 FROM STTM_CUSTOMER c
+                        WHERE c.customer_no = p.customer_no);
+    p('Fiches CUST_PERSONAL orphelines       : '||v_n);
+
+    sub('5.7 STTM_CUSTOMER vs STTM_KYC_MASTER (couverture KYC)');
+    SELECT COUNT(*) INTO v_n FROM STTM_CUSTOMER c
+     WHERE c.kyc_ref_no IS NULL;
+    p('Clients sans KYC_REF_NO                       : '||v_n);
+    SELECT COUNT(*) INTO v_n FROM STTM_CUSTOMER c
+     WHERE c.kyc_ref_no IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM STTM_KYC_MASTER k
+                        WHERE k.kyc_ref_no = c.kyc_ref_no);
+    p('Clients avec KYC_REF_NO mais master inexistant: '||v_n);
+    SELECT COUNT(*) INTO v_n FROM STTM_KYC_MASTER k
+     WHERE NOT EXISTS (SELECT 1 FROM STTM_CUSTOMER c
+                        WHERE c.kyc_ref_no = k.kyc_ref_no);
+    p('Lignes KYC_MASTER non rattachees a un client  : '||v_n);
+
+    sub('5.8 Repartition KYC RETAIL vs CORPORATE');
+    SELECT COUNT(*) INTO v_n FROM STTM_KYC_RETAIL;     p('STTM_KYC_RETAIL    : '||v_n);
+    SELECT COUNT(*) INTO v_n FROM STTM_KYC_CORPORATE;  p('STTM_KYC_CORPORATE : '||v_n);
+    -- coherence : un KYC ne devrait apparaitre que dans une seule des deux
+    SELECT COUNT(*) INTO v_n FROM STTM_KYC_RETAIL r
+     WHERE EXISTS (SELECT 1 FROM STTM_KYC_CORPORATE c
+                    WHERE c.kyc_ref_no = r.kyc_ref_no);
+    p('KYC present a la fois en RETAIL et CORPORATE (anomalie) : '||v_n);
+END;
+/
